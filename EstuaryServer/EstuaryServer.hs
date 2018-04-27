@@ -51,7 +51,9 @@ mainWithDatabase db = do
   putStrLn $ "password: " ++ pwd
   es <- readEnsembles db
   postLog db $ (show (size es)) ++ " ensembles restored from database"
-  s <- newMVar $ newServer { password = pwd, ensembles = es }
+  ts <- readTutorials db
+  postLog db $ (show (size ts)) ++ " tutorials restored from database"  
+  s <- newMVar $ newServer { password = pwd, ensembles = es , tutorials =ts}
   let settings = (defaultWebAppSettings "Estuary.jsexe") { ssIndices = [unsafeToPiece "index.html"] }
   run port $ WS.websocketsOr WS.defaultConnectionOptions (webSocketsApp db s) (staticApp settings)
 
@@ -142,7 +144,6 @@ processResult db _ c (Error x) = postLog db $ "Error (processResult): " ++ x
 processResult db s c (Ok x) = processRequest db s c x
 
 processRequest :: SQLite.Connection -> MVar Server -> ClientHandle -> ServerRequest -> IO ()
-
 processRequest db s c (Authenticate x) = do
   pwd <- getPassword s
   if x == pwd
@@ -185,6 +186,17 @@ processRequest db s c (CreateEnsemble name pwd) = onlyIfAuthenticated s c $ do
   saveNewEnsembleToDatabase s name db
 
 processRequest db s c (EnsembleRequest x) = processInEnsemble db s c x
+
+processRequest db s c (GetTutorialList x) = do
+  postLog db $ ("GetTutorialList: "++x)
+  getTutorialList s x >>= respond s c
+
+processRequest db s c (CreateTutorial name pwd tutType) = onlyIfAuthenticated s c $ do
+  postLog db $ "CreateTutorial"++name
+  t<- getCurrentTime
+  updateServer s $ createTutorial name pwd tutType t
+  getTutorialList s tutType >>= respondAll s
+  saveNewTutorialToDatabase s name tutType db
 
 processRequest db s c GetServerClientCount = do
   postLog db "GetServerClientCount"
@@ -261,7 +273,7 @@ processEnsembleRequest db _ _ _ _ = postLog db $ "warning: action failed pattern
 
 send :: ServerResponse -> [Client] -> IO ()
 send x cs = forM_ cs $ \y -> do
-  (WS.sendTextData (connection y) $ (T.pack . encodeStrict) x)  
+  (WS.sendTextData (connection y) $ (T.pack . encodeStrict) x)
   `catch` \(SomeException e) -> putStrLn $ "send exception: " ++ (show e)
 
 respond :: MVar Server -> ClientHandle -> ServerResponse -> IO ()
@@ -301,3 +313,19 @@ saveEnsembleToDatabase s name db = do
   where
     f (Just e) = writeEnsemble db name e
     f Nothing = postLog db $ "saveEnsembleToDatabase lookup failure for ensemble " ++ name
+
+saveNewTutorialToDatabase:: MVar Server -> String -> String -> SQLite.Connection -> IO ()
+saveNewTutorialToDatabase s name tutType db = do
+  s' <- readMVar s
+  f $ Data.Map.lookup name $  maybe Map.empty id $ Data.Map.lookup tutType (tutorials s')
+  where
+    f (Just e) = writeNewTutorial db name tutType e -- TODO make this...
+    f Nothing = postLog db $ "saveNewEnsembleToDatabase lookup failure for ensemble " ++ name
+
+saveTutorialToDatabase:: MVar Server -> String -> String -> SQLite.Connection -> IO ()
+saveTutorialToDatabase s name tutType db = do
+  s' <- readMVar s
+  f $ Data.Map.lookup name $  maybe Map.empty id $ Data.Map.lookup tutType (tutorials s')
+  where
+    f (Just e) = writeTutorial db name tutType e -- TODO make this...
+    f Nothing = postLog db $ "saveNewEnsembleToDatabase lookup failure for ensemble " ++ name

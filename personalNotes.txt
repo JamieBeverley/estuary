@@ -1,0 +1,61 @@
+-- returns an Event with a tutorial and the tutorial password for when the event should be saved
+createTutorial:: ProgrammingLanguage -> Language -> m (Event t (Tutorial, String))
+
+-- Or should TidalcyclesStructure and Text be the same 'language' but theres an option for the structure vs. text interface in the tutorial creation interface?
+
+data ProgrammingLanguage = Tidalcycles | Cquenze
+
+
+-- here, programmingLanguage and Language are used to denote where in the tutorials section of estuary the tutorial shows up (ie. if you click 'create tutorial' under the CQuenze tab or the 'TidalStructureEditor' one or under English vs. Espanol)
+data Tutorial = Tutorial {name::String, programmingLanguage::ProgrammingLanguage, language::Language ,rank::Int, pages::Map Int TutorialPage}
+
+data TutorialPage = TutorialPage {title::String, sections::Map Int (Either TextBlob Editor)}
+
+data Editor = ...?
+
+
+- ensemble states - can change by user changing things or things from the ws.
+
+- Estuary/Widgets/Views.hs
+- different table of the database for views vs. tutorials?
+  - request - what client can send to server
+  - ensembleRequest - join and leave necessary, create has to exist
+  - ensembleRequest - detailed stuff within ensemble - including authenticating and stuff...
+  -
+
+add TutorialRequest (Sited String EnsembleRequest a)
+- Server - issue warning if it receives a weird TutorialRequest 1
+
+- widget for list of views  - different between ensemble and tutorial
+- EnsembleState - stuff thats in an ensemble - ensemble from viewpoint of client, customview - when you use 'setview' - activeview
+  -'zones' Map Int Definition - likely to change?
+
+publishedViews - those are tutorial pages
+userHandle - could be just empty string
+ensembleName - name of tutorial
+- Estate - just used by client - what makes it useful is in estate.hs - commandToStateChanges, requestToStateChanges, responseToStateChanges ->
+
+so tutorials would basically be a wrapper around tutorial
+
+EnsembleState -> what should this be called
+
+
+-- problem that all instructions leading up to tutorials are English
+
+
+-- Estuary preset system:
+--   Types/View
+
+-- similar to ensembles -
+--   zones -
+--   only difference btwn ensemble and tutorial situation; not updating the ensemble
+-- ensemble response down to client from server
+-- performance in tutorial never shared
+-- passwords - if you have admin password you can make one - another password for editing tutorial itself
+- tutorial view that spits out nice haskell code - if you want to standardize those in another deployment by default
+- licensing - making a tutorial needs to say somewhere - you're opting into the open source deal here
+-
+
+-- navigation - also would be useful in ensemble page
+-- generalize ensemble onto another case
+--
