@@ -60,6 +60,7 @@ viewInEnsembleWidget ensemble now commands deltasDown = mdo
   let commandChanges = fmap commandsToStateChanges commands  -- Is this also where view changes will get wrapped in? TODO
   let ensembleResponses = fmap (justSited ensemble . justEnsembleResponses) deltasDown
   let responseChanges = fmap ((foldl (.) id) . fmap responsesToStateChanges) ensembleResponses
+
   -- let handleChanges = fmap (\x es -> es { userHandle = x}) hdl
   let requestChanges = fmap requestsToStateChanges edits
   -- ensembleState <- foldDyn ($) initialState $ mergeWith (.) [commandChanges,responseChanges,handleChanges,requestChanges]
@@ -91,7 +92,7 @@ viewInTutorialWidget :: MonadWidget t m =>
   String -> UTCTime -> Event t Command -> Event t [ServerResponse] ->
   m (Dynamic t DefinitionMap, Event t ServerRequest, Event t Hint)
 
-viewInTutorialWidget tutorialName tutorialType now commands deltasDown = mdo
+viewInTutorialWidget tutorialName  now commands deltasDown = mdo
 
   -- UI for global ensemble parameters
   (hdl,pwdRequest,tempoRequest) <- divClass "ensembleHeader" $ do
@@ -125,16 +126,22 @@ viewInTutorialWidget tutorialName tutorialType now commands deltasDown = mdo
 
   -- management of EnsembleState
   let initialState = newEnsembleState tutorialName now
-  let ensembleResponses = fmap (justSited tutorialName . justEnsembleResponses) deltasDown -- get deltasDown, filter to just the ensemble responses, and then just get the ones pertinent to this tutorial
+  let ensembleResponses = fmap (justSited tutorialName . justTutorialResponse) deltasDown -- get deltasDown, filter to just the ensemble responses, and then just get the ones pertinent to this tutorial
   let commandChanges = fmap commandsToStateChanges $ leftmost [commands,switchPromptlyDyn changeViewCommand]-- Terminal Commands
   let responseChanges = fmap ((foldl (.) id) . fmap responsesToStateChanges) ensembleResponses  --
   let handleChanges = fmap (\x es -> es { userHandle = x}) hdl
   let requestChanges = fmap requestsToStateChanges edits
   ensembleState <- foldDyn ($) initialState $ mergeWith (.) [commandChanges,responseChanges,handleChanges,requestChanges]
 
+
+  asdf<-foldDyn (+) (0::Int) ((1::Int) <$ ensembleResponses)
+  asdf' <- mapDyn show asdf
+  dynText asdf'
   tempoHints <- liftM (fmap TempoHint . updated . nubDyn) $ mapDyn tempo ensembleState
 
   views <- liftM nubDyn $ mapDyn publishedViews ensembleState -- Dyn  Map string view
+
+  mapDyn (show .  Map.keys) views >>= dynText
 
   changeViewCommand <- divClass "tutorialPage" $ do
     changePage <- button "Change Tutorial Page"
@@ -155,7 +162,7 @@ viewInTutorialWidget tutorialName tutorialType now commands deltasDown = mdo
   let hints = leftmost [tempoHints,hintsUi] -- *** note: might this occasionally lose a hint?
 
   -- form requests to send to server
-  joinRequest <- liftM (JoinTutorial tutorialName tutorialType <$) $ getPostBuild
+  joinRequest <- liftM (JoinTutorial tutorialName <$) $ getPostBuild
   let commandRequests = attachDynWithMaybe commandsToRequests ensembleState commands
   -- let ensembleRequests = fmap (EnsembleRequest . Sited tutorialName) $ leftmost [edits,pwdRequest,tempoRequest,commandRequests]
   let ensembleRequests = fmap (TutorialRequest . Sited tutorialName) $ leftmost [edits,pwdRequest,tempoRequest,commandRequests]
@@ -256,6 +263,5 @@ viewChangeWidget vMap = do
   let attrs = constDyn ("class"=:"tutorialPage")
   let showViews = constDyn $ Map.mapWithKey (\k v -> k) vMap
   tutorialDD <- dropdown "def" showViews $ def & dropdownConfig_attributes .~ attrs
-  b <- button "please work"
-  return $ fmap (SetView . maybe (LabelView 2 ) id . (flip Map.lookup) vMap ) (leftmost [_dropdown_change tutorialDD,fmap (const $ "de")b])
+  return $ fmap ActiveView (_dropdown_change tutorialDD)
   -- attachDynWith  (\a b ->SetView $ maybe (LabelView 2) id $ Map.lookup b a) vMap (leftmost [_dropdown_change tutorialDD,fmap (const $ "de")b])  --dyn view

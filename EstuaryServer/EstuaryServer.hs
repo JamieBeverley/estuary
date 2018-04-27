@@ -52,7 +52,7 @@ mainWithDatabase db = do
   es <- readEnsembles db
   postLog db $ (show (size es)) ++ " ensembles restored from database"
   ts <- readTutorials db
-  postLog db $ (show (size ts)) ++ " tutorials restored from database"  
+  postLog db $ (show (size ts)) ++ " tutorials restored from database"
   s <- newMVar $ newServer { password = pwd, ensembles = es , tutorials =ts}
   let settings = (defaultWebAppSettings "Estuary.jsexe") { ssIndices = [unsafeToPiece "index.html"] }
   run port $ WS.websocketsOr WS.defaultConnectionOptions (webSocketsApp db s) (staticApp settings)
@@ -138,6 +138,12 @@ onlyIfAuthenticatedInEnsemble s h f = do
   let c = clients s' Map.! h
   if (authenticatedInEnsemble c) then f else putStrLn "ignoring request from client not authenticated in ensemble"
 
+onlyIfAuthenticatedInTutorial :: MVar Server -> ClientHandle -> IO () -> IO ()
+onlyIfAuthenticatedInTutorial s h f = do
+  s' <- readMVar s
+  let c = clients s' Map.! h
+  if (authenticatedInTutorial c) then f else putStrLn "ignoring request from client not authenticated in tutorial"
+
 
 processResult :: SQLite.Connection -> MVar Server -> ClientHandle -> Result ServerRequest -> IO ()
 processResult db _ c (Error x) = postLog db $ "Error (processResult): " ++ x
@@ -174,6 +180,7 @@ processRequest db s c (JoinEnsemble x) = do
   where
     f s' c' = c' { ensemble = Just x, authenticatedInEnsemble = E.password ((ensembles s') Map.! x) == "" }
 
+
 processRequest db s c LeaveEnsemble = do
   postLog db $ "leaving ensemble"
   updateClient s c $ \c' -> c' { ensemble = Nothing, authenticatedInEnsemble = False }
@@ -186,17 +193,38 @@ processRequest db s c (CreateEnsemble name pwd) = onlyIfAuthenticated s c $ do
   saveNewEnsembleToDatabase s name db
 
 processRequest db s c (EnsembleRequest x) = processInEnsemble db s c x
+processRequest db s c (TutorialRequest x) = processInTutorial db s c x
 
-processRequest db s c (GetTutorialList x) = do
-  postLog db $ ("GetTutorialList: "++x)
-  getTutorialList s x >>= respond s c
+processRequest db s c (GetTutorialList) = do
+  postLog db $ ("GetTutorialList: ")
+  getTutorialList s >>= respond s c
 
-processRequest db s c (CreateTutorial name pwd tutType) = onlyIfAuthenticated s c $ do
+processRequest db s c (CreateTutorial name pwd) = onlyIfAuthenticated s c $ do
   postLog db $ "CreateTutorial"++name
   t<- getCurrentTime
-  updateServer s $ createTutorial name pwd tutType t
-  getTutorialList s tutType >>= respondAll s
-  saveNewTutorialToDatabase s name tutType db
+  updateServer s $ createTutorial name pwd  t
+  getTutorialList s  >>= respondAll s
+  saveNewTutorialToDatabase s name db
+
+processRequest db s c (JoinTutorial x) = do
+  postLog db $ "joining tutorial " ++ x
+  updateClientWithServer s c f
+  s' <- takeMVar s
+  let e = tutorials s' Map.! x -- *** this is unsafe and should be refactored, same problem below in f too ***
+  let t = E.tempo e
+  respond' s' c $ TutorialResponse (Sited x (Tempo (Tidal.cps t) (toRational . utcTimeToPOSIXSeconds $ Tidal.at t) (Tidal.beat t)))
+  let defs' = fmap (TutorialResponse . Sited x . ZoneResponse) $ Map.mapWithKey Sited $ fmap Edit $ E.defs e
+  mapM_ (respond' s' c) $ defs'
+  respond' s' c $ TutorialResponse (Sited x (DefaultView (E.defaultView e)))
+  let views' = fmap (TutorialResponse . Sited x . View) $ Map.mapWithKey Sited $ E.views e
+  mapM_ (respond' s' c) $ views'
+  putMVar s s'
+  where
+    f s' c' = c' { tutorial = Just x, authenticatedInEnsemble = E.password ((tutorials s') Map.! x) == "" }
+
+processRequest db s c LeaveTutorial = do
+  postLog db $ "leaving ensemble"
+  updateClient s c $ \c' -> c' { tutorial = Nothing, authenticatedInEnsemble = False }
 
 processRequest db s c GetServerClientCount = do
   postLog db "GetServerClientCount"
@@ -240,7 +268,9 @@ processEnsembleRequest db s c e ListViews = do
 
 processEnsembleRequest db s c e (GetView v) = do
   postLog db $ "GetView " ++ v ++ " in ensemble " ++ e
-  getView s e v >>= maybe (return ()) (\v' -> respond s c (EnsembleResponse (Sited e (View (Sited v v')))))
+  view <-getView s e v
+  putStrLn ("view from getview: "++(show view))
+  maybe (return ()) (\v' -> respond s c (EnsembleResponse (Sited e (View (Sited v v'))))) view
 
 processEnsembleRequest db s c e (PublishView (Sited key value)) = onlyIfAuthenticatedInEnsemble s c $ do
   postLog db $ "PublishView in (" ++ e ++ "," ++ key ++ "): " ++ (show value)
@@ -271,6 +301,76 @@ processEnsembleRequest db s c e x@(TempoChange newCps) = onlyIfAuthenticatedInEn
 processEnsembleRequest db _ _ _ _ = postLog db $ "warning: action failed pattern matching"
 
 
+
+
+
+processInTutorial :: SQLite.Connection -> MVar Server -> ClientHandle -> Sited String (EnsembleRequest Definition) -> IO ()
+processInTutorial db s c (Sited e x) = processTutorialRequest db s c e x
+
+
+
+processTutorialRequest :: SQLite.Connection -> MVar Server -> ClientHandle -> String -> EnsembleRequest Definition -> IO ()
+processTutorialRequest db s c e x@(AuthenticateInEnsemble p2) = do
+  p1 <- getTutorialPassword s e
+  let p2' = if p1 == "" then "" else p2
+  if p1 == p2'
+    then do
+      postLog db $ "successful AuthenticateInTutorial in " ++ e
+      updateClient s c $ setAuthenticatedInTutorial True
+    else do
+      postLog db $ "failed AuthenticateInTutorial in " ++ e
+      updateClient s c $ setAuthenticatedInTutorial False
+
+processTutorialRequest db s c e ListViews = do
+  postLog db $ "ListViews in " ++ e
+  vs <- getTutorialViews s e
+  respond s c (TutorialResponse (Sited e (ViewList vs)))
+
+processTutorialRequest db s c e x@(ZoneRequest (Sited zone (Edit value))) = onlyIfAuthenticatedInTutorial s c $ do
+  postLog db $ "Edit in tutorial: (" ++ e ++ "," ++ (show zone) ++ "): " ++ (show value)
+  updateServer s $ editTutorial e zone value
+  respondTutorialNoOrigin s c e $ TutorialResponse (Sited e (ZoneResponse (Sited zone (Edit value))))
+  saveTutorialToDatabase s e db
+
+-- Don't think we really need people to evaluate on each other's things...
+-- processTutorialRequest db s c e x@(ZoneRequest (Sited zone (Evaluate value))) = onlyIfAuthenticatedInTutorial s c $ do
+--   postLog db $ "Eval in (" ++ e ++ "," ++ (show zone) ++ "): " ++ (show value)
+--   respondEnsembleNoOrigin s c e $ EnsembleResponse (Sited e (ZoneResponse (Sited zone (Evaluate value))))
+
+processTutorialRequest db s c e (GetView v) = do
+  postLog db $ "GetView " ++ v ++ " in tutorial " ++ e
+  getView s e v >>= maybe (return ()) (\v' -> respond s c (TutorialResponse (Sited e (View (Sited v v')))))
+
+processTutorialRequest db s c e (PublishView (Sited key value)) = onlyIfAuthenticatedInTutorial s c $ do
+  postLog db $ "PublishView in tutorial (" ++ e ++ "," ++ key ++ "): " ++ (show value)
+  updateServer s $ setTutorialView e key value
+  saveTutorialToDatabase s e db
+
+processTutorialRequest db s c e (PublishDefaultView v) = onlyIfAuthenticatedInTutorial s c $ do
+  postLog db $ "PublishDefaultView in " ++ e
+  updateServer s $ setDefaultTutorialView e v
+  saveTutorialToDatabase s e db
+
+processTutorialRequest db s c e (DeleteView x) = do
+  postLog db $ "DeleteView " ++ x ++ " in tutorial " ++ e
+  updateServer s $ deleteTutorialView e x
+  saveTutorialToDatabase s e db
+
+processTutorialRequest db s c e x@(TempoChange newCps) = onlyIfAuthenticatedInTutorial s c $ do
+  timeNow <- Data.Time.getCurrentTime
+  updateServer s $ tempoChangeInTutorial e timeNow newCps
+  newTempo <- getTempoInTutorial s e
+  if isJust newTempo then do
+    let newTempo' = fromJust newTempo
+    respondAll s $ TutorialResponse (Sited e (Tempo (Tidal.cps newTempo') (toRational . utcTimeToPOSIXSeconds $ Tidal.at newTempo') (Tidal.beat newTempo') ))
+    postLog db $ "TempoChange in " ++ e
+    saveTutorialToDatabase s e db
+  else postLog db $ "attempt to TempoChange in non-existent tutorial " ++ e
+
+processTutorialRequest db _ _ _ _ = postLog db $ "warning: action failed pattern matching (tutorial)"
+
+
+
 send :: ServerResponse -> [Client] -> IO ()
 send x cs = forM_ cs $ \y -> do
   (WS.sendTextData (connection y) $ (T.pack . encodeStrict) x)
@@ -298,6 +398,13 @@ respondEnsembleNoOrigin s c e x = withMVar s $ (send x) . Map.elems . Map.delete
 ensembleFilter :: String -> Map.Map ClientHandle Client -> Map.Map ClientHandle Client
 ensembleFilter e = Map.filter $ (==(Just e)) . ensemble
 
+respondTutorialNoOrigin :: MVar Server -> ClientHandle -> String -> ServerResponse -> IO ()
+respondTutorialNoOrigin s c e  x = withMVar s $ (send x) . Map.elems . Map.delete c . ensembleFilter e . clients
+
+tutorialFilter :: String -> Map.Map ClientHandle Client -> Map.Map ClientHandle Client
+tutorialFilter e = Map.filter $ (==(Just e)) . tutorial
+
+
 saveNewEnsembleToDatabase :: MVar Server -> String -> SQLite.Connection -> IO ()
 saveNewEnsembleToDatabase s name db = do
   s' <- readMVar s
@@ -314,18 +421,18 @@ saveEnsembleToDatabase s name db = do
     f (Just e) = writeEnsemble db name e
     f Nothing = postLog db $ "saveEnsembleToDatabase lookup failure for ensemble " ++ name
 
-saveNewTutorialToDatabase:: MVar Server -> String -> String -> SQLite.Connection -> IO ()
-saveNewTutorialToDatabase s name tutType db = do
+saveNewTutorialToDatabase:: MVar Server -> String  -> SQLite.Connection -> IO ()
+saveNewTutorialToDatabase s name  db = do
   s' <- readMVar s
-  f $ Data.Map.lookup name $  maybe Map.empty id $ Data.Map.lookup tutType (tutorials s')
+  f $ Data.Map.lookup name (tutorials s')
   where
-    f (Just e) = writeNewTutorial db name tutType e -- TODO make this...
+    f (Just e) = writeNewTutorial db name e
     f Nothing = postLog db $ "saveNewEnsembleToDatabase lookup failure for ensemble " ++ name
 
-saveTutorialToDatabase:: MVar Server -> String -> String -> SQLite.Connection -> IO ()
-saveTutorialToDatabase s name tutType db = do
+saveTutorialToDatabase:: MVar Server -> String  -> SQLite.Connection -> IO ()
+saveTutorialToDatabase s name db = do
   s' <- readMVar s
-  f $ Data.Map.lookup name $  maybe Map.empty id $ Data.Map.lookup tutType (tutorials s')
+  f $ Data.Map.lookup name (tutorials s')
   where
-    f (Just e) = writeTutorial db name tutType e -- TODO make this...
+    f (Just e) = writeTutorial db name e
     f Nothing = postLog db $ "saveNewEnsembleToDatabase lookup failure for ensemble " ++ name

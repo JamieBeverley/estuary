@@ -15,7 +15,7 @@ data EnsembleResponse v =
   View (Sited String View) |
   DefaultView View |
   Tempo Double Rational Double | --  cps at(timepoint) beat(continuous index)
-  EnsembleClientCount Int
+  EnsembleClientCount Int 
 
 instance JSON v => JSON (EnsembleResponse v) where
   showJSON (Chat name msg) = encJSDict [("Chat",name),("m",msg)]

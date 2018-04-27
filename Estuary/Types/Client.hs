@@ -9,7 +9,9 @@ data Client = Client {
   connection :: WS.Connection,
   authenticated :: Bool,
   ensemble :: Maybe String,
-  authenticatedInEnsemble :: Bool
+  tutorial::Maybe String,
+  authenticatedInEnsemble :: Bool,
+  authenticatedInTutorial :: Bool
 }
 
 newClient :: ClientHandle -> WS.Connection -> Client
@@ -18,12 +20,13 @@ newClient h c = Client {
   connection = c,
   authenticated = False,
   ensemble = Nothing,
-  authenticatedInEnsemble = False
+  tutorial = Nothing,
+  authenticatedInEnsemble = False,
+  authenticatedInTutorial=False
 }
 
 setAuthenticatedInEnsemble :: Bool -> Client -> Client
 setAuthenticatedInEnsemble x c = c { authenticatedInEnsemble = x }
 
-
-
-
+setAuthenticatedInTutorial::Bool->Client -> Client
+setAuthenticatedInTutorial x c = c { authenticatedInTutorial = x}

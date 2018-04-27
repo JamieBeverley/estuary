@@ -40,7 +40,7 @@ terminalWidget deltasUp deltasDown = divClass "terminal" $ mdo
   let errorMsgs = fmapMaybe (either (Just . (:[]) . ("Error: " ++) . show) (const Nothing)) parsedInput
 
   -- parse responses from server in order to display log/chat messages
-  let deltasDown' = fmap justEnsembleResponses deltasDown
+  let deltasDown' = fmap justEnsembleOrTutorial deltasDown
   let spaceAndDeltasDown = attachDyn currentSpace deltasDown'
   let justInSpace = fmap (\(x,y) -> justSited x $ y) spaceAndDeltasDown
   let responseMsgs = fmap (mapMaybe messageForEnsembleResponse) justInSpace

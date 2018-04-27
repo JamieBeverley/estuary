@@ -15,6 +15,8 @@ instance (JSON a, JSON b) => JSON (Sited a b) where
   readJSON (JSObject x) | otherwise = Error $ "Unable to parse JSObject as Estuary.Types.Sited" ++ (show x)
   readJSON _ = Error "Unable to parse as Estuary.Types.Sited"
 
+
+
 justSited :: Eq a => a -> [Sited a b] -> [b]
 justSited x1 = mapMaybe f
   where
