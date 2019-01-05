@@ -77,7 +77,7 @@ viewWidget ctx renderInfo (TextView n rows) i deltasDown = do
 viewWidget ctx renderInfo (SequenceView n) i deltasDown = do
   let i' = f $ Map.findWithDefault (Sequence defaultValue) n i
   let deltasDown' = fmapMaybe (lastOrNothing . justSequences . justEditsInZone n) deltasDown
-  v <- sequencer i' deltasDown'
+  v <- sequencer ctx i' deltasDown'
   value <- mapDyn (\(a,_,_) -> a) v
   edits <- liftM switchPromptlyDyn $ mapDyn (\(_,a,_)-> a) v
   hints <- liftM switchPromptlyDyn $ mapDyn (\(_,_,a)-> a) v
