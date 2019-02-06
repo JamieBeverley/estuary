@@ -39,22 +39,13 @@ sequencer ctx iMap update = elClass "table" "sequencer" $ mdo
 
   tmp <- liftM nubDyn $ mapDyn tempo ctx
   iTempo <- liftM (tagDyn tmp) getPostBuild
+  debug $ (("tempo control update: " ++) . show) <$> leftmost [updated tmp, iTempo]
   let tempoWidgetUpdate = (\a-> sequencerBeatCount (cps a) (beat a) seqLen ) <$> leftmost [updated tmp, iTempo] -- Event t (m (Event t Int))
-  -- debug $ leftmost [updated tmp, iTempo]
-
-  -- sequencerBeatCount ::(MonadWidget t m) => Double-> Double -> Int -> m (Event t Int)
-
-
   beatEv <- liftM switchPromptlyDyn $ widgetHold (return never) $ tempoWidgetUpdate
   b1 <- mapDyn (beat . tempo) ctx
-  debug $ ((++) "beat on tempo update: " . show) <$> tagDyn b1 beatEv
-
-  -- widgetHold :: MonadWidget t m => m a -> Event t (m a) -> m (Dynamic t a)
-
-
-  -- beatEv <- sequencerBeatCount 0.5 seqLen
-
+  debug $ ((++) "beat on beat-track update: " . show) <$> tagDyn b1 beatEv
   sequencerBeatRow seqLen beatEv
+
   widgets <- liftM joinDynThroughMap $ listWithKeyShallowDiff iMap downstreamEvs (const sequencerRow) -- Dyn t (Map Int ((String,[Bool]), Event t ()))
   values <- mapDyn (fmap fst) widgets -- Dyn t (Map Int (String,[Bool]))
   dynEvs <- mapDyn (mergeMap . fmap (snd)) widgets -- Event t (Map Int ())
@@ -110,17 +101,39 @@ sequenceIndicator' v ev = do
   elDynAttr "td" attrs $ return ()
   return ()
 
-
--- cps, beat, seqlen -> event int
 sequencerBeatCount ::(MonadWidget t m) => Double-> Double -> Int -> m (Event t Int)
 sequencerBeatCount c b seqLen = do
+  now <- liftIO getCurrentTime
+  tick <- tickLossy ((1.0::NominalDiffTime)/(fromIntegral seqLen)/(realToFrac c)) now -- Event t TickInfo
+  intTick <- foldDyn (\x y-> mod (y+1) seqLen) 0 tick
+  let beatDuration = 1/c/(fromIntegral seqLen)
+  let fractionalDiff = realToFrac $ (1-(b-(fromIntegral ((floor b)::Int))))*beatDuration
+  liftIO $ putStrLn $ ("fractionalDiff: "++) $  show fractionalDiff
+  -- let integerDiff = realToFrac $ 0
+  delay (fractionalDiff) $ updated intTick
+
+
+
+
+
+
+
+
+
+
+
+
+-- cps, beat, seqlen -> event int
+sequencerBeatCount' ::(MonadWidget t m) => Double-> Double -> Int -> m (Event t Int)
+sequencerBeatCount' c b seqLen = do
   now <- liftIO getCurrentTime
   tick <- tickLossy ((1.0::NominalDiffTime)/(fromIntegral seqLen)/(realToFrac c)) now -- Event t TickInfo
   v <- foldDyn (\x y-> mod (y+1) seqLen) 0 tick
   let beatDuration = 1/c/(fromIntegral seqLen)
   -- delay ((realToFrac (b - (fromIntegral $ floor b)))*beatDuration + (realToFrac $ (fromIntegral floor b) * beatDuration)) $ updated v
   let x1 = fromIntegral $ mod (floor b) seqLen -- uhg...
-  let x2 = realToFrac $ x1*beatDuration
+  let x2 = realToFrac $ x1*beatDuration   --
+  liftIO $ putStrLn ("beat offet: " ++ show x2)
   let x3 = realToFrac $ (b - (fromIntegral ((floor b)::Int))) * beatDuration
   pb <- getPostBuild
   debug $ fmap (\_-> ("delay: " ++ (show $ x2 + x3))) pb
