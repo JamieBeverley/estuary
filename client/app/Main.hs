@@ -1,4 +1,4 @@
-{-# LANGUAGE JavaScriptFFI #-}
+{-# LANGUAGE JavaScriptFFI, OverloadedStrings #-}
 
 module Main where
 
@@ -9,16 +9,21 @@ import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad(liftM)
 
+import Sound.MusicW
+
+import Estuary.Render.AudioContext
 import Estuary.WebDirt.WebDirt
 import Estuary.WebDirt.SuperDirt
 import Estuary.Protocol.Foreign
 import Estuary.Types.Context
+import Estuary.Types.CanvasState
 import Estuary.Widgets.Estuary
 import Estuary.Widgets.Navigation(Navigation(..))
 import Estuary.WebDirt.SampleEngine
 import Estuary.RenderInfo
 import Estuary.RenderState
 import Estuary.Renderer
+import Estuary.Render.DynamicsMode
 
 import GHC.Conc.Sync(setUncaughtExceptionHandler, getUncaughtExceptionHandler)
 
@@ -44,21 +49,23 @@ main = do
   -- Wait for 10k ms or click, which ever happens first
   waitForInteractionOrTimeout 10000
 
-  now <- Data.Time.getCurrentTime
-  wd <- newWebDirt
+  mainBusNodes@(mainBusIn,_,_,_) <- initializeMainBus
+  wd <- liftAudioIO $ newWebDirt mainBusIn
+  initializeWebAudio wd
   sd <- newSuperDirt
   protocol <- estuaryProtocol
-  mv <- newMVar []
-  let ic = initialContext now wd sd mv
-  c <- newMVar $ ic
+  mv <- emptyCanvasState >>= newMVar
+  now <- liftAudioIO $ audioUTCTime
+  c <- newMVar $ initialContext now mainBusNodes wd sd mv
   ri <- newMVar $ emptyRenderInfo
   forkRenderThread c ri
 
-  root <- fmap pFromJSVal js_estuaryMountPoint :: IO HTMLDivElement
-  mainWidgetAtRoot root $ estuaryWidget Splash c ri protocol
+  -- root <- fmap pFromJSVal js_estuaryMountPoint :: IO HTMLDivElement
+  -- mainWidgetAtRoot root $ estuaryWidget Splash c ri protocol
+  mainWidgetInElementById "estuary-root" $ estuaryWidget Splash c ri protocol
 
 visuallyCrash :: SomeException -> IO ()
-visuallyCrash e = 
+visuallyCrash e =
   let lines = [
           "Unhandled exception: ",
           displayException e,
@@ -71,10 +78,11 @@ waitForInteractionOrTimeout ms = do
   timeout (ms * 1000) js_waitForClickBody
   return ()
 
+{- disactivated temporarily in update to new reflex
 mainWidgetAtRoot :: (IsHTMLElement e) => e -> Widget Spider (Gui Spider (WithWebView SpiderHost) (HostFrame Spider)) () -> IO ()
 mainWidgetAtRoot root widget = runWebGUI $ \webView -> do
   Just doc <- liftM (fmap castToHTMLDocument) $ webViewGetDomDocument webView
-  attachWidget root webView widget
+  attachWidget root webView widget -}
 
 foreign import javascript unsafe
   "if (window.confirm($1)) {        \

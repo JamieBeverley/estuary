@@ -5,6 +5,7 @@ import Data.IntMap.Strict
 import qualified Sound.Tidal.Context as Tidal
 import qualified Sound.Punctual.PunctualW as Punctual
 import qualified Sound.Punctual.Evaluation as Punctual
+import Sound.MusicW.AudioContext
 
 import Estuary.Types.Definition
 import Estuary.RenderInfo
@@ -16,7 +17,7 @@ data RenderState = RenderState {
   cachedDefs :: !DefinitionMap,
   paramPatterns :: !(IntMap Tidal.ControlPattern),
   dirtEvents :: ![(UTCTime,Tidal.ControlMap)],
-  punctuals :: !(IntMap Punctual.PunctualW),
+  punctuals :: !(IntMap (Punctual.PunctualW AudioContextIO)),
   punctualVideo :: !(IntMap Punctual.PunctualState),
   superContinentProgram :: SuperContinent.Program,
   superContinentState :: SuperContinent.SuperContinentState,
@@ -27,19 +28,21 @@ data RenderState = RenderState {
   canvasOps :: [(UTCTime,CanvasOp)]
   }
 
-initialRenderState :: UTCTime -> RenderState
-initialRenderState t = RenderState {
-  logicalTime = t,
-  cachedDefs = empty,
-  paramPatterns = empty,
-  dirtEvents = [],
-  punctuals = empty,
-  punctualVideo = empty,
-  superContinentProgram = [],
-  superContinentState = SuperContinent.emptyState,
-  renderStartTime = t,
-  renderEndTime = t,
-  renderTimes = [],
-  info = emptyRenderInfo,
-  canvasOps = []
+initialRenderState :: UTCTime -> IO RenderState
+initialRenderState t = do
+  scs <- SuperContinent.emptyState
+  return $ RenderState {
+    logicalTime = t,
+    cachedDefs = empty,
+    paramPatterns = empty,
+    dirtEvents = [],
+    punctuals = empty,
+    punctualVideo = empty,
+    superContinentProgram = [],
+    superContinentState = scs,
+    renderStartTime = t,
+    renderEndTime = t,
+    renderTimes = [],
+    info = emptyRenderInfo,
+    canvasOps = []
   }

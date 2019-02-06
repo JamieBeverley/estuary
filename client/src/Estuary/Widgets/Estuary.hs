@@ -1,11 +1,11 @@
-{-# LANGUAGE RecursiveDo, JavaScriptFFI #-}
+{-# LANGUAGE RecursiveDo, JavaScriptFFI, OverloadedStrings #-}
 
 module Estuary.Widgets.Estuary where
 
 import Control.Monad (liftM)
 
-import Reflex
-import Reflex.Dom
+import Reflex hiding (Request,Response)
+import Reflex.Dom hiding (Request,Response)
 import Text.JSON
 import Data.Time
 import Data.Map
@@ -15,6 +15,7 @@ import Control.Concurrent.MVar
 import GHCJS.Types
 import GHCJS.Marshal.Pure
 import Data.Functor (void)
+import qualified Data.Text as T
 
 import Estuary.Tidal.Types
 import Estuary.Protocol.Foreign
@@ -31,7 +32,6 @@ import Estuary.Types.Context
 import Estuary.Types.Hint
 import Estuary.Types.Samples
 import Estuary.Types.Tempo
-import Estuary.Widgets.LevelMeters
 import Estuary.Widgets.Terminal
 import Estuary.Reflex.Utility
 import Estuary.Types.Language
@@ -39,6 +39,7 @@ import Estuary.Help.LanguageHelp
 import Estuary.Languages.TidalParsers
 import qualified Estuary.Types.Term as Term
 import Estuary.RenderInfo
+import Estuary.Render.DynamicsMode
 import qualified Estuary.Types.Terminal as Terminal
 
 estuaryWidget :: MonadWidget t m => Navigation -> MVar Context -> MVar RenderInfo -> EstuaryProtocolObject -> m ()
@@ -62,18 +63,24 @@ estuaryWidget initialPage ctxM riM protocol = divClass "estuary" $ mdo
 
   commands <- footer ctx renderInfo deltasUp deltasDown' hints
 
-  (deltasDown,wsStatus) <- alternateWebSocket protocol deltasUp
+  (deltasDown,wsCtxChanges) <- alternateWebSocket protocol deltasUp
+
   let definitionChanges = fmapMaybe (fmap setDefinitions) $ updated values
   let deltasDown' = ffilter (not . Prelude.null) deltasDown
-  let wsChange = fmap (\w x -> x { wsStatus = w }) $ (updated . nubDyn) wsStatus
   let ccChange = fmap setClientCount $ fmapMaybe justServerClientCount deltasDown'
   let tempoChanges' = fmap (\t x -> x { tempo = t }) tempoChanges
-  let contextChanges = mergeWith (.) [definitionChanges, headerChanges, ccChange, tempoChanges', samplesLoadedEv, wsChange]
+  let contextChanges = mergeWith (.) [definitionChanges, headerChanges, ccChange, tempoChanges', samplesLoadedEv, wsCtxChanges]
   ctx <- foldDyn ($) ic contextChanges -- Dynamic t Context
 
-  t <- mapDyn theme ctx -- Dynamic t String
+  t <- nubDyn <$> mapDyn theme ctx -- Dynamic t String
   let t' = updated t -- Event t String
   changeTheme t'
+
+  let sd = superDirt ic
+  sdOn <- nubDyn <$> mapDyn superDirtOn ctx
+  performEvent_ $ fmap (liftIO . setActive sd) $ updated sdOn
+
+  updateDynamicsModes ctx
 
   updateContext ctxM ctx
 
@@ -97,55 +104,74 @@ foreign import javascript safe
   "document.getElementById('estuary-current-theme').setAttribute('href', $1);"
   js_setThemeHref :: JSVal -> IO ()
 
+updateDynamicsModes :: MonadWidget t m => Dynamic t Context -> m ()
+updateDynamicsModes ctx = do
+  iCtx <- (sample . current) ctx
+  let nodes = mainBus iCtx
+  dynamicsModeChanged <- liftM (updated . nubDyn) $ mapDyn dynamicsMode ctx
+  performEvent_ $ fmap (liftIO . changeDynamicsMode nodes) dynamicsModeChanged
+
 header :: (MonadWidget t m) => Dynamic t Context -> Dynamic t RenderInfo -> m (Event t ContextChange, Event t ())
 header ctx renderInfo = divClass "header" $ do
-  tick <- getPostBuild
-  hostName <- performEvent $ fmap (liftIO . (\_ -> getHostName)) tick
-  port <- performEvent $ fmap (liftIO . (\_ -> getPort)) tick
-  hostName' <- holdDyn "" hostName
-  port' <- holdDyn "" port
   clickedLogoEv <- dynButtonWithChild "logo" $
     dynText =<< translateDyn Term.EstuaryDescription ctx
   ctxChangeEv <- clientConfigurationWidgets ctx
   return (ctxChangeEv, clickedLogoEv)
 
 clientConfigurationWidgets :: (MonadWidget t m) => Dynamic t Context -> m (Event t ContextChange)
-clientConfigurationWidgets ctx = divClass "webDirt" $ do
-  divClass "webDirtMute" $ divClass "webDirtContent" $ do
+clientConfigurationWidgets ctx = divClass "config-toolbar" $ do  
+  themeChangeEv <- divClass "config-entry" $ do
     let styleMap =  fromList [("../css-custom/classic.css", "Classic"),("../css-custom/inverse.css","Inverse"), ("../css-custom/grayscale.css","Grayscale")]
     translateDyn Term.Theme ctx >>= dynText
-    styleChange <- divClass "themeSelector" $ do _dropdown_change <$> dropdown "../css-custom/classic.css" (constDyn styleMap) def -- Event t String
-    let styleChange' = fmap (\x c -> c {theme = x}) styleChange -- Event t (Context -> Context)
+    styleChange <- _dropdown_change <$> dropdown "../css-custom/classic.css" (constDyn styleMap) (def & attributes .~ constDyn ("class" =: "config-dropdown")) -- Event t String
+    return $ fmap (\x c -> c {theme = x}) styleChange -- Event t (Context -> Context)
+  
+  langChangeEv <- divClass "config-entry" $ do
     translateDyn Term.Language ctx >>= dynText
-    let langMap = constDyn $ fromList $ zip languages (fmap show languages)
-    langChange <- divClass "languageSelector" $ do _dropdown_change <$> (dropdown English langMap def)
-    let langChange' = fmap (\x c -> c { language = x }) langChange
+    let langMap = fromList $ zip languages (fmap (T.pack . show) languages)
+    langChange <- _dropdown_change <$> dropdown English (constDyn langMap) (def & attributes .~ constDyn ("class" =: "config-dropdown"))
+    return $ fmap (\x c -> c { language = x }) langChange
+
+  let condigCheckboxAttrs = def & attributes .~ constDyn ("class" =: "config-checkbox")
+
+  canvasEnabledEv <- divClass "config-entry" $ do
+    text "Canvas:"
+    canvasInput <- checkbox True condigCheckboxAttrs
+    return $ fmap (\x -> \c -> c { canvasOn = x }) $ _checkbox_change canvasInput
+    
+  superDirtEnabledEv <- divClass "config-entry" $ do
     text "SuperDirt:"
-    sdInput <- divClass "superDirtCheckbox" $ checkbox False $ def
-    let sdOn = fmap (\x -> (\c -> c { superDirtOn = x } )) $ _checkbox_change sdInput
+    sdInput <- checkbox False condigCheckboxAttrs
+    return $ fmap (\x -> (\c -> c { superDirtOn = x } )) $ _checkbox_change sdInput
+  
+  webDirtEnabledEv <- divClass "config-entry" $ do
     text "WebDirt:"
-    wdInput <-divClass "webDirtCheckbox" $ checkbox True $ def
-    let wdOn = fmap (\x -> (\c -> c { webDirtOn = x } )) $ _checkbox_change wdInput
-    return $ mergeWith (.) [langChange',sdOn,wdOn, styleChange']
+    wdInput <- checkbox True condigCheckboxAttrs
+    return $ fmap (\x -> (\c -> c { webDirtOn = x } )) $ _checkbox_change wdInput
+
+  dynamicsModeEv <- divClass "config-entry" $ do
+    text "Dynamics:"
+    let dmMap = fromList $ zip dynamicsModes (fmap (T.pack . show) dynamicsModes)
+    dmChange <- _dropdown_change <$> dropdown DefaultDynamics (constDyn dmMap) (def & attributes .~ constDyn ("class" =: "config-dropdown"))
+    return $ fmap (\x c -> c { dynamicsMode = x }) dmChange
+    
+  return $ mergeWith (.) [themeChangeEv, langChangeEv, canvasEnabledEv, superDirtEnabledEv, webDirtEnabledEv, dynamicsModeEv]
 
 footer :: MonadWidget t m => Dynamic t Context -> Dynamic t RenderInfo
   -> Event t Request -> Event t [Response] -> Event t Hint -> m (Event t Terminal.Command)
 footer ctx renderInfo deltasDown deltasUp hints = divClass "footer" $ do
   divClass "peak" $ do
-    text "server "
-    wsStatus' <- mapDyn wsStatus ctx
-    clientCount' <- mapDyn clientCount ctx
-    dynText =<< combineDyn f wsStatus' clientCount'
+    dynText . nubDyn =<< mapDyn (T.pack . f) ctx
     text " "
     dynText =<< translateDyn Term.Load ctx
     text ": "
-    dynText =<< mapDyn (show . avgRenderLoad) renderInfo
+    dynText . nubDyn =<< mapDyn (T.pack . show . avgRenderLoad) renderInfo
     text "% ("
-    dynText =<< mapDyn (show . peakRenderLoad) renderInfo
+    dynText . nubDyn =<< mapDyn (T.pack . show . peakRenderLoad) renderInfo
     text "% "
     dynText =<< translateDyn Term.Peak ctx
     text ") "
   terminalWidget ctx deltasDown deltasUp hints
   where
-    f "connection open" c = "(" ++ (show c) ++ " connections)"
-    f x _ = "(" ++ x ++ ")"
+    f c | wsStatus c == "connection open" = "(" ++ show (clientCount c) ++ " connections, latency " ++ show (serverLatency c) ++ ")"
+    f c | otherwise = "(" ++ wsStatus c ++ ")"
