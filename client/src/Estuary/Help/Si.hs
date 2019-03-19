@@ -28,18 +28,18 @@ siHelpFile = divClass "languageHelp" $ do
 about :: MonadWidget t m => m ()
 about = do
   divClass "about" $ text "Sentidos"
-  divClass "aboutText" $ text "A mini live coding esolang developed in Bogotá, Colombia."
+  divClass "about" $ text "A mini live coding esolang developed in Bogotá, Colombia."
 
 exampleText :: Text -> Text
 
-exampleText "Nose" = "Nose"
-exampleText "Willy" = "Willy"
-exampleText "Gracioso" = "Gracioso"
-exampleText "Elefante" = "Elefante"
-exampleText "Pegado" =  "Willy Pegado "
-exampleText "Lejos" =  "Nose lejos 4"
-exampleText "Tortuga" =  "Gracioso Tortuga 0.5"
-exampleText "Comadreja" =  "Elefante Comadreja 2"
+exampleText "Nose" = "#Nose"
+exampleText "Willy" = "#Willy"
+exampleText "Gracioso" = "#Gracioso"
+exampleText "Elefante" = "#Elefante"
+exampleText "Pegado" =  "#Willy Pegado 2"
+exampleText "Lejos" =  "#Nose Lejos 4"
+exampleText "Tortuga" =  "#Gracioso Tortuga 0.5"
+exampleText "Comadreja" =  "#Elefante Comadreja 2"
 
 referenceText :: Text -> Text
 

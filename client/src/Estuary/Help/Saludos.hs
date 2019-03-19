@@ -23,15 +23,15 @@ saludosHelpFile = divClass "languageHelp" $ do
 about :: MonadWidget t m => m ()
 about = do
  divClass "about" $ text "Saludos"
- divClass "aboutText" $ text "A mini live coding esolang developed in Bogotá, Colombia."
+ divClass "about" $ text "A mini live coding esolang developed in Bogotá, Colombia."
 
 exampleText :: Text -> Text
 
-exampleText "hola" = "hola"
-exampleText "cómo estas" = "cómo estas"
-exampleText "saludos" = "saludos"
-exampleText "que tal" = "hola todo bien"
-exampleText "todo bien" =  "saludos todo bien 2"
+exampleText "hola" = "¡hola!"
+exampleText "cómo estas" = "¡cómo estas!"
+exampleText "saludos" = "¡saludos!"
+exampleText "que tal" = "¡hola! que tal"
+exampleText "todo bien" =  "¡saludos! todo bien 2"
 
 referenceText :: Text -> Text
 

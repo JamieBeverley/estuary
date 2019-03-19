@@ -25,7 +25,7 @@ cqenzeHelpFile = divClass "languageHelp" $ do
 about :: MonadWidget t m => m ()
 about = do
     divClass "about" $ text "CQenze"
-    divClass "aboutText" $ text "A mini live-coding language based on the ChucK based CQenze by Estaban Betancur."
+    divClass "about" $ text "A mini live-coding language based on the ChucK based CQenze by Estaban Betancur."
 
 exampleText :: Text -> Text
 
@@ -39,14 +39,14 @@ exampleText "b" = "bev++++b"
 exampleText "c" = "bass++++c"
 
 referenceText :: Text -> Text
-referenceText "+" = "returns a beat."
+referenceText "+" = "returns a beat"
 referenceText "-" = "returns a silence"
 referenceText "?" = "returns TidalCycles' degrade"
-referenceText "f" = "returns TidalCycles' fast"
-referenceText "s" = "returns TidalCycles' slow"
+referenceText "f" = "returns TidalCycles' fast 2"
+referenceText "s" = "returns TidalCycles' slow 2"
 referenceText "r" = "returns TidalCycles' rev"
 referenceText "b" = "returns TidalCycles' brak"
-referenceText "c" = "returns TidalCycles' chop"
+referenceText "c" = "returns TidalCycles' chop 2"
 
   -- help files for samples
 functionRef :: MonadWidget t m => Text -> m ()

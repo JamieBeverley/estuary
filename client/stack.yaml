@@ -34,18 +34,18 @@ packages:
   extra-dep: true
 
 - location:
-    git: https://github.com/d0kt0r0/Tidal.git
-    commit: 633c7f882d3009a50af61076179fa17eb8c0d55b
+    git: https://github.com/TidalCycles/Tidal.git
+    commit: 65724857fad9983b35dd24fe37fb36a0cb7dbbb8
   extra-dep: true
 
 - location:
-    git: https://github.com/d0kt0r0/MusicW.git
-    commit: 94830ba9f5929abbd09094bc5d21d44c6a88a889
+    git: https://github.com/dktr0/MusicW.git
+    commit: d7d4c57a54f47eb60144dbd36e16009ae5d73925
   extra-dep: true
 
 - location:
-    git: https://github.com/d0kt0r0/Punctual.git
-    commit: ab0ba53310d6f764bf19490f835623c915a13eb8
+    git: https://github.com/dktr0/Punctual.git
+    commit: 37968562ff7d85082ff4a38e6871b552b228cb56
   extra-dep: true
 
 extra-deps:
@@ -59,3 +59,12 @@ extra-deps:
   - monoidal-containers-0.4.0.0
   - hosc-0.16
   - parsec-numbers-0.1.0
+
+  # hspec and hspec-2.2.4 dependencies. Newer version may or may not work in GHCJS
+  - hspec-2.2.4
+  - hspec-core-2.2.4
+  - hspec-expectations-0.7.2
+  - hspec-discover-2.2.4
+  - HUnit-1.3.1.2
+  - QuickCheck-2.8.2
+  - quickcheck-io-0.1.4

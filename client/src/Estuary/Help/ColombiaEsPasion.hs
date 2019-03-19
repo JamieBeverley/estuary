@@ -24,16 +24,16 @@ colombiaEsPasionHelpFile = divClass "languageHelp" $ do
 about :: MonadWidget t m => m ()
 about = do
   divClass "about" $ text "Colombia Es Pasion"
-  divClass "aboutText" $ text "A mini live coding esolang developed in Bogotá, Colombia."
+  divClass "about" $ text "A mini live coding esolang developed in Bogotá, Colombia."
 
 exampleText :: Text -> Text
 
-exampleText "voz" = "voz"
-exampleText "pasión" = "pasión"
-exampleText "paz" = "paz"
-exampleText "educación" =  "pasión educación 2"
-exampleText "protesta" = "paz protesta 3"
-exampleText "soacha" = "voz soacha"
+exampleText "voz" = "\"voz voz\""
+exampleText "pasión" = "\"pasión\""
+exampleText "paz" = "\"paz paz paz\""
+exampleText "educación" =  "\"pasión pasión pasión pasión\" educación 2"
+exampleText "protesta" = "\"paz\" protesta 3"
+exampleText "soacha" = "\"voz voz voz voz\" soacha"
 
 referenceText :: Text -> Text
 

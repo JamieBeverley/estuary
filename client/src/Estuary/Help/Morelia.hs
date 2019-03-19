@@ -30,21 +30,21 @@ moreliaHelpFile = divClass "languageHelp" $ do
 about :: MonadWidget t m => m ()
 about = do
  divClass "about" $ text "Morelia"
- divClass "aboutText" $ text "A mini live coding esolang developed in Morelia, México."
+ divClass "about" $ text "A mini live coding esolang developed in Morelia, México."
 
 exampleText :: Text -> Text
 
-exampleText "~" = "X ~"
-exampleText "X" = "X X X x ~"
-exampleText "IX" = "IX IX ~"
-exampleText "VIII" = "VIII ~"
-exampleText "VII" = "VII VII VII ~"
-exampleText "VI" =  "VI VI ~"
-exampleText "V" = "V ~ "
-exampleText "IV" = "IV IV IV IV ~"
-exampleText "III" = "III III III ~"
-exampleText "II" = "II II ~"
-exampleText "I" = "I ~"
+exampleText "~" = "\"X\" ~"
+exampleText "X" = "\"X X X X\" ~"
+exampleText "IX" = "\"IX IX\" ~"
+exampleText "VIII" = "\"VIII\" ~"
+exampleText "VII" = "\"VII VII VII\" ~"
+exampleText "VI" =  "\"VI VI\" ~"
+exampleText "V" = "\"V\" ~"
+exampleText "IV" = "\"IV IV IV IV\" ~"
+exampleText "III" = "\"III III III\" ~"
+exampleText "II" = "\"II II\" ~"
+exampleText "I" = "\"I\" ~"
 
 referenceText :: Text -> Text
 
