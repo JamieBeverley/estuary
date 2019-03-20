@@ -13,6 +13,7 @@ import Text.Read
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent.MVar
 import GHCJS.Types
+import GHCJS.DOM.Types (uncheckedCastTo,HTMLCanvasElement(..))
 import GHCJS.Marshal.Pure
 import Data.Functor (void)
 import qualified Data.Text as T
@@ -47,10 +48,17 @@ import Estuary.Widgets.Generic (debug)
 
 estuaryWidget :: MonadWidget t m => Navigation -> MVar Context -> MVar RenderInfo -> EstuaryProtocolObject -> m ()
 estuaryWidget initialPage ctxM riM protocol = divClass "estuary" $ do
-  ic <- liftIO $ readMVar ctxM
+  ic0 <- liftIO $ takeMVar ctxM
+  let canvasAttrs = fromList [("class","canvas"),("style",T.pack $ "z-index: -1;"), ("width","1920"), ("height","1080")]
+  canvas <- liftM (uncheckedCastTo HTMLCanvasElement .  _element_raw . fst) $ elAttr' "canvas" canvasAttrs $ return ()
+  let ic = ic0 { canvasElement = Just canvas }
+  liftIO $ putMVar ctxM ic
+
   renderInfo <- pollRenderInfoChanges riM
 
-  -- load the samples map, if there is a better way to triiger an event from an async callback
+
+
+  -- load the samples map, if there is a better way to trigger an event from an async callback
   -- then this should be update to reflect that.
   postBuild <- getPostBuild
   samplesLoadedEv <- performEventAsync $ ffor postBuild $ \_ triggerEv -> liftIO $ do
@@ -69,10 +77,9 @@ estuaryWidget initialPage ctxM riM protocol = divClass "estuary" $ do
     let tempoChanges' = fmap (\t x -> x { tempo = t }) tempoChanges
     let contextChanges = mergeWith (.) [definitionChanges, headerChanges, ccChange, tempoChanges', samplesLoadedEv, wsCtxChanges]
     ctx <- foldDyn ($) ic contextChanges -- Dynamic t Context
-
-    (headerChanges, clickedLogoEv) <- header ctx renderInfo
+    headerChanges <- header ctx renderInfo
     (values, deltasUp, hints, tempoChanges) <- divClass "page" $ do
-      navigation initialPage (Splash <$ clickedLogoEv) ctx renderInfo commands deltasDown
+      navigation initialPage never ctx renderInfo commands deltasDown
 
     commands <- footer ctx renderInfo deltasUp deltasDown' hints
 
@@ -119,12 +126,9 @@ updateDynamicsModes ctx = do
   dynamicsModeChanged <- liftM (updated . nubDyn) $ mapDyn dynamicsMode ctx
   performEvent_ $ fmap (liftIO . changeDynamicsMode nodes) dynamicsModeChanged
 
-header :: (MonadWidget t m) => Dynamic t Context -> Dynamic t RenderInfo -> m (Event t ContextChange, Event t ())
+header :: (MonadWidget t m) => Dynamic t Context -> Dynamic t RenderInfo -> m (Event t ContextChange)
 header ctx renderInfo = divClass "header" $ do
-  clickedLogoEv <- dynButtonWithChild "logo" $
-    dynText =<< translateDyn Term.EstuaryDescription ctx
-  ctxChangeEv <- clientConfigurationWidgets ctx
-  return (ctxChangeEv, clickedLogoEv)
+  clientConfigurationWidgets ctx
 
 clientConfigurationWidgets :: (MonadWidget t m) => Dynamic t Context -> m (Event t ContextChange)
 clientConfigurationWidgets ctx = divClass "config-toolbar" $ do
