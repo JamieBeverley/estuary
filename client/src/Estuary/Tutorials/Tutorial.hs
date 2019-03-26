@@ -26,8 +26,13 @@ import GHC.Generics
 
 import GHCJS.Marshal
 
+import Estuary.Widgets.Generic (debug)
+
 import Reflex
-import Reflex.Dom
+import Reflex.Dom hiding (getKeyEvent, preventDefault)
+import GHCJS.DOM.EventM
+import Reflex.Dom.Contrib.KeyEvent
+
 
 import Estuary.Types.Language
 import Estuary.Tidal.Types
@@ -52,26 +57,40 @@ attachIndex:: [a] -> [(Int,a)]
 attachIndex l = zip (take (length l) [0..]) l
 
 dynList::MonadWidget t m => [Dynamic t a] -> m (Dynamic t [a])
-dynList l = mapDyn elems $ joinDynThroughMap $ constDyn $ fromList $ attachIndex l
+dynList l = return $ fmap elems $ joinDynThroughMap $ constDyn $ fromList $ attachIndex l
 
-title::MonadWidget t m => m a -> m a
-title widget = elClass "div" "title" widget
+title::MonadWidget t m => Dynamic t Context -> Map Language Text -> m ()
+title ctx langMap = elClass "div" "title" $ labelWidget ctx langMap
 
 labelWidget::MonadWidget t m => Dynamic t Context -> M.Map Language Text -> m ()
 labelWidget ctx txt = do
   let dflt = safeHead "" $ elems txt
-  str <- mapDyn (\c-> maybe dflt id $ M.lookup (language c) txt) ctx
+  let str = fmap (\c-> maybe dflt id $ M.lookup (language c) txt) ctx
   dynText str
   where
     safeHead a [] = a
     safeHead _ (x:xs) = x
 
-miniTidalWidget :: MonadWidget t m => Dynamic t Context -> Int -> Int -> String -> m (Dynamic t (Int, Definition), Event t Hint)
-miniTidalWidget ctx rows index initialText = elClass "div" "panel" $ do
+miniTidalWidget :: MonadWidget t m => Dynamic t Context -> Int -> String -> m (Dynamic t DefinitionMap, Event t Hint)
+miniTidalWidget ctx rows initialText = elClass "div" "panel" $ do
   let silent = (Live (TidalTextNotation MiniTidal,"") L3)
-  pb <- liftM (silent <$) $ getPostBuild -- TODO PB used to block things from playing immediately.. should probably be less hacky about this
   shh <- buttonDynAttrs "silence" silent (constDyn $ M.fromList [("style","float:right")])
-  (v, _, hints) <- textNotationWidget ctx (constDyn Nothing) rows (Live (TidalTextNotation MiniTidal, initialText) L3) never
-  v' <- holdDyn (Live (TidalTextNotation MiniTidal, initialText) L3) $  leftmost [pb, updated v, shh]
-  defn <- mapDyn (\v-> (index,(TextProgram v))) v'
-  return (defn, hints)
+  eval <- buttonDynAttrs "eval" () (constDyn $ M.fromList [("style","float:left")])
+  x <- textArea $ def & textAreaConfig_attributes .~ (constDyn $ M.fromList [("rows", T.pack $ show rows)]) & textAreaConfig_initialValue .~ (T.pack initialText)
+  let e = _textArea_element x
+  e' <- wrapDomEvent (e) (onEventName Keypress) $ do
+    y <- getKeyEvent
+    if (keyPressWasShiftEnter y) then (preventDefault >> return True) else return False
+  let evalVal = tagPromptlyDyn (fmap ((\str -> Live (TidalTextNotation MiniTidal,str) L3) . T.unpack) $ _textArea_value x) $ leftmost [eval, () <$ ffilter id e']
+  val <- holdDyn (Live (TidalTextNotation MiniTidal, "") L3) $  leftmost [evalVal, shh]
+  let defn = fmap (\v-> IM.singleton 1 (TextProgram v)) val
+  return (defn, never)
+  where keyPressWasShiftEnter ke = (keShift ke == True) && (keKeyCode ke == 13)
+
+
+
+
+
+
+
+--
