@@ -43,6 +43,9 @@ import Estuary.RenderInfo
 import Estuary.Render.DynamicsMode
 import qualified Estuary.Types.Terminal as Terminal
 
+-- @
+import Estuary.Widgets.Generic (debug)
+
 estuaryWidget :: MonadWidget t m => Navigation -> MVar Context -> MVar RenderInfo -> EstuaryProtocolObject -> m ()
 estuaryWidget initialPage ctxM riM protocol = divClass "estuary" $ do
   ic0 <- liftIO $ takeMVar ctxM
@@ -73,9 +76,7 @@ estuaryWidget initialPage ctxM riM protocol = divClass "estuary" $ do
     let tempoChanges' = fmap (\t x -> x { tempo = t }) tempoChanges
     let contextChanges = mergeWith (.) [definitionChanges, headerChanges, ccChange, tempoChanges', samplesLoadedEv, wsCtxChanges]
     ctx <- foldDyn ($) ic contextChanges -- Dynamic t Context
-
     headerChanges <- header ctx renderInfo
-
     (values, deltasUp, hints, tempoChanges) <- divClass "page" $ do
       navigation initialPage never ctx renderInfo commands deltasDown
 

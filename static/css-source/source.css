@@ -383,6 +383,25 @@ ______________________________
 .sequencerRow .delete{
 	flex-grow: 1;
 }
+.sequencerIndicator{
+/* 	flex-grow:1; */
+	display: block;
+/* 	background-color: grey; */
+	width: 99%;
+	margin:1%;
+}
+
+.sequencerIndicatorSpacer{
+	width: 425%;
+}
+
+.sequencerIndicatorActivated{
+/* 	flex-grow:1; */
+	background-color: red;
+	width: 99%;
+	display: block;
+	margin:1%;
+}
 
 .sequencerRow .delete button {
 	top:5%;
@@ -405,6 +424,7 @@ ______________________________
 .sequencerRow{
 	display: flex;
 	width: 100%;
+  max-height: 50px;
 	flex-grow: 1;
 	min-height: 0px;
 
